@@ -14,11 +14,11 @@
 namespace Pins {
   constexpr uint8_t RPM_IN = 2;
   constexpr uint8_t PWM_OUT = 3;
-  constexpr uint8_t RELAY_CTRL = 7;
+  constexpr uint8_t FAN_RELAY = 7;
   constexpr uint8_t TEMPERATURE_IN = 9;
 }
 
-uint8_t relayState = LOW;
+uint8_t fanRelayState = LOW;
 volatile uint32_t revolutions = 0;
 
 OneWire oneWire(Pins::TEMPERATURE_IN);
@@ -27,10 +27,10 @@ DallasTemperature dallas(&oneWire);
 void setup() { 
   pinMode(Pins::RPM_IN, INPUT);
   pinMode(Pins::PWM_OUT, OUTPUT);
-  pinMode(Pins::RELAY_CTRL, OUTPUT);
+  pinMode(Pins::FAN_RELAY, OUTPUT);
   pinMode(Pins::TEMPERATURE_IN, INPUT);
 
-  analogWrite(Pins::RELAY_CTRL, relayState);
+  analogWrite(Pins::FAN_RELAY, fanRelayState);
 
   const int32_t interruptPin = digitalPinToInterrupt(Pins::RPM_IN);
   attachInterrupt(interruptPin, fanRevolutionInterrupt, RISING);
@@ -71,14 +71,14 @@ uint8_t pulseWidthFromTemperature(float temperature) {
 }
 
 // NOTE: the relay shield might track the state by itself
-void toggleRelay(uint8_t pulseWidth) {
+void toggleFanRelay(uint8_t pulseWidth) {
   uint8_t newState = pulseWidth ? HIGH : LOW;
 
-  if (newState != relayState) {
-    digitalWrite(Pins::RELAY_CTRL, newState);
+  if (newState != fanRelayState) {
+    digitalWrite(Pins::FAN_RELAY, newState);
   }
 
-  relayState = newState;
+  fanRelayState = newState;
 }
 
 void loop() {
@@ -89,7 +89,7 @@ void loop() {
   uint8_t pulseWidth = pulseWidthFromTemperature(temperature);
   analogWrite(Pins::PWM_OUT, pulseWidth);
 
-  toggleRelay(pulseWidth);
+  toggleFanRelay(pulseWidth);
 
   uint32_t rpm = measureRpm();
 
