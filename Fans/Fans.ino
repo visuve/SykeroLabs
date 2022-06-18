@@ -6,62 +6,51 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// https://docs.arduino.cc/tutorials/generic/secrets-of-arduino-pwm
+constexpr uint8_t TEMPERATURE_PIN = 2;
+constexpr uint8_t PWM_OUTPUT_PIN = 3;
 
-constexpr uint16_t PWM_FREQUENCY_MIN = 0;
-constexpr uint16_t PWM_FREQUENCY_MAX = 320; // ~25khz
-
-constexpr float TMP_MIN_THRESHOLD = 20.0f;
-constexpr float TMP_MAX_THRESHOLD = 40.0f;
-constexpr float TMP_THRESHOLD_MULTIPLIER = 16.0f;
-
-OneWire oneWire(2);
+OneWire oneWire(TEMPERATURE_PIN);
 DallasTemperature sensors(&oneWire);
 
 void setup() { 
-  pinMode(9, OUTPUT);
-
-  // COM1A(1:0) = 0b10   (Output A clear rising/set falling)
-  // COM1B(1:0) = 0b00   (Output B normal operation)
-  // WGM(13:10) = 0b1010 (Phase correct PWM)
-  // ICNC1      = 0b0    (Input capture noise canceler disabled)
-  // ICES1      = 0b0    (Input capture edge select disabled)
-  // CS(12:10)  = 0b001  (Input clock select = clock/1)
-  
-  TCCR1A = (1 << COM1A1) | (1 << WGM11);
-  ICR1 = PWM_FREQUENCY_MAX;
-  OCR1A = 0;
+  pinMode(PWM_OUTPUT_PIN, OUTPUT);
 
   Serial.begin(9600);
+  sensors.begin();
 
   while (!Serial) {
     delay(10);
   }
+}
 
-  sensors.begin();
+uint8_t pulseWidthFromTemperature(float temperature) {
+  static constexpr float TEMPERATURE_MIN = 20.0f;
+  static constexpr float TEMPERATURE_MAX = 40.0f;
+  static constexpr float TEMPERATURE_STEP = 
+    0xFF / (TEMPERATURE_MAX - TEMPERATURE_MIN);
+
+  if (temperature < TEMPERATURE_MIN) {
+    return 0x00;
+  }
+
+  if (temperature >= TEMPERATURE_MAX) {
+    return 0xFF;
+  } 
+
+  return (temperature - TEMPERATURE_MIN) * TEMPERATURE_STEP;
 }
 
 void loop() {
   delay(2000);
 
   sensors.requestTemperatures();
-  float tmp = sensors.getTempCByIndex(0);
-  uint16_t pwm;
+  float temperature = sensors.getTempCByIndex(0);
+  uint8_t pulseWidth = pulseWidthFromTemperature(temperature);
 
   Serial.print("TMP=");
-  Serial.print(tmp);
+  Serial.print(temperature);
+  Serial.print(" PWM=");
+  Serial.println(pulseWidth);
 
-  if (tmp < TMP_MIN_THRESHOLD) {
-    pwm = PWM_FREQUENCY_MIN;
-    Serial.println(" PWM=0");
-  } else if (tmp >= TMP_MAX_THRESHOLD) {
-    pwm = PWM_FREQUENCY_MAX;
-    Serial.println(" PWM=320");
-  } else {
-    pwm = (tmp - TMP_MIN_THRESHOLD) * TMP_THRESHOLD_MULTIPLIER;
-    Serial.print(" PWM=");
-    Serial.println(pwm);
-  }
-
-  OCR1A = pwm;
+  analogWrite(PWM_OUTPUT_PIN, pulseWidth);
 }
