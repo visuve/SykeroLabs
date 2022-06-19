@@ -2,6 +2,9 @@
 #include <DallasTemperature.h>
 
 /*
+  SykeröLabs greenhouse automation
+  Copyright (©) visuve 2022
+
   Parts used:
   - Elecrow Relay Shield v1.1
   - 200mm 12v PWM-controlled fan
@@ -20,13 +23,13 @@ namespace Pins {
   constexpr uint8_t TEMPERATURE_IN = 9;
 }
 
+OneWire oneWire(Pins::TEMPERATURE_IN);
+DallasTemperature dallas(&oneWire);
+
 uint32_t lastPumpTime = 0;
 uint8_t pumpRelayState = LOW;
 uint8_t fanRelayState = LOW;
 volatile uint32_t revolutions = 0;
-
-OneWire oneWire(Pins::TEMPERATURE_IN);
-DallasTemperature dallas(&oneWire);
 
 void setup() { 
   pinMode(Pins::RPM_IN, INPUT);
@@ -53,10 +56,13 @@ void fanRevolutionInterrupt() {
   ++revolutions;
 }
 
-uint32_t measureRpm() {
+// NOTE: this method is not 100% accurate as the
+// revolutions are not read or written in an atomic way.
+uint32_t measureRpm(const uint32_t interval = 1000) {
   revolutions = 0;
-  delay(1000);
-  return revolutions * 30;
+  // Revolutions are incremented in the interrupt above
+  delay(interval);
+  return revolutions * (interval * 0.03f);
 }
 
 uint8_t pulseWidthFromTemperature(float temperature) {
@@ -78,7 +84,7 @@ uint8_t pulseWidthFromTemperature(float temperature) {
 
 // NOTE: the relay shield might track the state by itself
 void toggleFanRelay(uint8_t pulseWidth) {
-  uint8_t newState = pulseWidth ? HIGH : LOW;
+  const uint8_t newState = pulseWidth ? HIGH : LOW;
 
   if (newState != fanRelayState) {
     Serial.println(newState ? "Switching fan on!" : "Switching fan off.");
@@ -89,12 +95,12 @@ void toggleFanRelay(uint8_t pulseWidth) {
 }
 
 void togglePumpRelay() {
-  uint32_t now = millis();
-  uint32_t delta = now - lastPumpTime;
+  const uint32_t now = millis();
+  const uint32_t delta = now - lastPumpTime;
 
   // One minute of pumping for every 10min
-  constexpr uint32_t SLEEP_TIME_MS = 600000;
-  constexpr uint32_t PUMP_TIME_MS = 60000; 
+  static constexpr uint32_t SLEEP_TIME_MS = 600000;
+  static constexpr uint32_t PUMP_TIME_MS = 60000; 
 
   if (pumpRelayState == LOW && delta >= SLEEP_TIME_MS)  {
       Serial.println("Turning on pumps!");
@@ -116,14 +122,16 @@ void loop() {
   delay(1000);
 
   dallas.requestTemperatures();
-  float temperature = dallas.getTempCByIndex(0);
-  uint8_t pulseWidth = pulseWidthFromTemperature(temperature);
+  
+  const float temperature = dallas.getTempCByIndex(0);
+  const uint8_t pulseWidth = pulseWidthFromTemperature(temperature);
+  
   analogWrite(Pins::PWM_OUT, pulseWidth);
 
   toggleFanRelay(pulseWidth);
   togglePumpRelay();
 
-  uint32_t rpm = measureRpm();
+  const uint32_t rpm = measureRpm();
 
   Serial.print("TMP=");
   Serial.print(temperature);
