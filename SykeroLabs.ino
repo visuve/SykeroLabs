@@ -1,30 +1,24 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Wire.h>
+#include <RTClib.h>
 
 /*
   SykeröLabs greenhouse automation
   Copyright (©) visuve 2022
-
-  Parts used:
-  - Elecrow Relay Shield v1.1
-  - 200mm 12v PWM-controlled fan
-  - Dallas DS18B20 temperature sensor
-  - 4.7k resistor (for DS18B20)
-  - 10k resistor (for RPM input)
-  - 12v submersible pumps
-  - 12v DC input
 */
 
 namespace Pins {
   constexpr uint8_t RPM_IN = 2;
-  constexpr uint8_t PWM_OUT = 3;
   constexpr uint8_t PUMP_RELAY = 4;
   constexpr uint8_t FAN_RELAY = 7;
-  constexpr uint8_t TEMPERATURE_IN = 9;
+  constexpr uint8_t TEMPERATURE_IN = 8;
+  constexpr uint8_t PWM_OUT = 9;
 }
 
 OneWire oneWire(Pins::TEMPERATURE_IN);
 DallasTemperature dallas(&oneWire);
+RTC_DS1307 clock;
 
 uint32_t lastPumpTime = 0;
 uint8_t pumpRelayState = LOW;
@@ -46,10 +40,14 @@ void setup() {
 
   Serial.begin(9600);
   dallas.begin();
+  clock.begin();
 
   while (!Serial) {
     delay(10);
   }
+
+  // Adjust to compile time
+  clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
 }
 
 void fanRevolutionInterrupt() {
@@ -94,13 +92,29 @@ void toggleFanRelay(uint8_t pulseWidth) {
   fanRelayState = newState;
 }
 
+bool isNightTime() {
+  if (clock.isrunning()) {
+    return false;
+  }
+
+  const DateTime now = clock.now();
+  return now.hour() < 8 && now.hour() > 21;
+}
+
 void togglePumpRelay() {
+  if (isNightTime() && pumpRelayState != LOW) {
+    Serial.println("Turning off pumps; night time.");
+    pumpRelayState = LOW;
+    digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
+    return;
+  }
+
   const uint32_t now = millis();
   const uint32_t delta = now - lastPumpTime;
 
-  // One minute of pumping for every 10min
-  static constexpr uint32_t SLEEP_TIME_MS = 600000;
-  static constexpr uint32_t PUMP_TIME_MS = 60000; 
+  // Five minutes of pumping for every hour
+  static constexpr uint32_t SLEEP_TIME_MS = 3600000;
+  static constexpr uint32_t PUMP_TIME_MS = 300000; 
 
   if (pumpRelayState == LOW && delta >= SLEEP_TIME_MS)  {
       Serial.println("Turning on pumps!");
@@ -119,7 +133,10 @@ void togglePumpRelay() {
 }
 
 void loop() {
-  delay(1000);
+
+  // TODO: this is fine for the fan, but it's far too unprecise for the pumps
+  // Use RTC alarms or some other method
+  delay(120000); // 2 min
 
   dallas.requestTemperatures();
   
