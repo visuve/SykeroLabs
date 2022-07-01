@@ -20,7 +20,7 @@ OneWire oneWire(Pins::TEMPERATURE_IN);
 DallasTemperature dallas(&oneWire);
 RTC_DS1307 clock;
 
-uint32_t lastPumpTime = 0;
+DateTime lastPumpTime;
 uint8_t pumpRelayState = LOW;
 uint8_t fanRelayState = LOW;
 volatile uint32_t revolutions = 0;
@@ -46,8 +46,9 @@ void setup() {
     delay(10);
   }
 
-  // Adjust to compile time
-  clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  if (!clock.isrunning()) {
+    clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 }
 
 void fanRevolutionInterrupt() {
@@ -92,31 +93,34 @@ void toggleFanRelay(uint8_t pulseWidth) {
   fanRelayState = newState;
 }
 
-bool isNightTime() {
-  if (clock.isrunning()) {
+void adjustFanSpeed(uint8_t pulseWidth) {
+  analogWrite(Pins::PWM_OUT, pulseWidth);
+}
+
+bool isNightTime(const DateTime& now) {
+  if (!clock.isrunning()) {
     return false;
   }
 
-  const DateTime now = clock.now();
-  return now.hour() < 8 && now.hour() > 21;
+  return now.hour() >= 21 || now.hour() <= 8;
 }
 
-void togglePumpRelay() {
-  if (isNightTime() && pumpRelayState != LOW) {
-    Serial.println("Turning off pumps; night time.");
-    pumpRelayState = LOW;
-    digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
+void togglePumpRelay(const DateTime& now) {
+  if (isNightTime(now)) {
+    if (pumpRelayState != LOW) {
+      Serial.println("Turning off pumps; night time.");
+      pumpRelayState = LOW;
+      digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
+      return;
+    }
+
+    Serial.println("ZzZzZz...");
     return;
   }
 
-  const uint32_t now = millis();
-  const uint32_t delta = now - lastPumpTime;
+  const TimeSpan delta = now - lastPumpTime;
 
-  // Five minutes of pumping for every hour
-  static constexpr uint32_t SLEEP_TIME_MS = 3600000;
-  static constexpr uint32_t PUMP_TIME_MS = 300000; 
-
-  if (pumpRelayState == LOW && delta >= SLEEP_TIME_MS)  {
+  if (pumpRelayState == LOW && delta.seconds() >= 3300)  {
       Serial.println("Turning on pumps!");
       pumpRelayState = HIGH;
       digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
@@ -124,7 +128,7 @@ void togglePumpRelay() {
       return;
   }
 
-  if (pumpRelayState == HIGH && delta >= PUMP_TIME_MS) {
+  if (pumpRelayState == HIGH && delta.seconds() >= 60) {
     Serial.println("Turning off pumps.");
     pumpRelayState = LOW;
     digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
@@ -133,27 +137,24 @@ void togglePumpRelay() {
 }
 
 void loop() {
-
-  // TODO: this is fine for the fan, but it's far too unprecise for the pumps
-  // Use RTC alarms or some other method
-  delay(120000); // 2 min
-
   dallas.requestTemperatures();
   
+  const DateTime time = clock.now();
   const float temperature = dallas.getTempCByIndex(0);
   const uint8_t pulseWidth = pulseWidthFromTemperature(temperature);
   
-  analogWrite(Pins::PWM_OUT, pulseWidth);
-
   toggleFanRelay(pulseWidth);
-  togglePumpRelay();
+  adjustFanSpeed(pulseWidth);
+  togglePumpRelay(time);
 
-  const uint32_t rpm = measureRpm();
-
-  Serial.print("TMP=");
+  Serial.print(time.timestamp());
+  Serial.print(';');
   Serial.print(temperature);
-  Serial.print(" PWM=");
+  Serial.print(';');
   Serial.print(pulseWidth);
-  Serial.print(" RPM=");
-  Serial.println(rpm);
+  Serial.print(';');
+  Serial.println(measureRpm());
+
+  // TODO: this is fine for the fan, but it's unprecise for the pumps
+  delay(60000); // 1 min
 }
