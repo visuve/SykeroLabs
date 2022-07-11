@@ -10,31 +10,33 @@
 - RTCLib v2.0.2
   - Should include BusIO v1.11.1 automatically
   - https://github.com/adafruit/RTClib
+- SD v1.2.4
+  - Can be found in the library manager using search word "SD card"
+  - https://github.com/arduino-libraries/SD
 
 ## Parts used:
   - Elecrow Relay Shield v1.1 
     - https://www.elecrow.com/wiki/index.php?title=Relay_Shield
 
-  - Elecrow Data Logger Shield v.1.1
-    - https://www.elecrow.com/wiki/index.php?title=RTC_Data_Logger_Shield_v1.1
-    - NOTE: the chip select pin interferes with the relay shield
+  - Iduino ST1046
+    - https://www.openhacks.com/uploadsproductos/st1046_iduino.pdf
     
-  - SparkFun Qwiic Shield
-    - https://www.sparkfun.com/products/14352
-
-  - 200mm 12v PWM-controlled fan
+  - 2x 200mm 12v PWM-controlled fan
     - https://noctua.at/en/nf-a20-pwm
 
   - Maxim Intergrated (former Dallas) DS18B20 temperature sensor
     - https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf
   
   - 4.7k resistor (for DS18B20)
-  - 10k resistor (for fan RPM input)
-
+  - 2x 10k resistors (for fan RPM inputs)
+  - 2.54mm pitch male headers (for fans)
+  - 16GB SDHC card (for Iduino ST ST1046 [logs])
   - Biltema 12v 2A submersible pumps (controlled by the relay shield)
   - SolarXon ~50W solar panel 
   - Biltema 12v solar panel controller
 
-## Diagram:
+## TODO:
 
-- TODO...
+- A diagram or picture of the soldered parts on the Iduino ST1046
+- PH and EC measurement probes (I might run out of program storage)
+  - PH adjustment and nutrient pumps
