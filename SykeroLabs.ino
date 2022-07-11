@@ -32,7 +32,7 @@ uint8_t fanRelayState = LOW;
 volatile uint32_t fan1Revolutions = 0;
 volatile uint32_t fan2Revolutions = 0;
 bool sdInitialized = false;
-DateTime lastLogTime;
+DateTime lastLogRotation;
 
 constexpr char CSV_HEADER[] = "Time;Temperature;Pulse Width;Fan 1 RPM;Fan 2 RPM";
 
@@ -170,7 +170,7 @@ void togglePumpRelay(const DateTime& time) {
 }
 
 void rotateLog(const DateTime& time) {
-  TimeSpan delta = time - lastLogTime;
+  const TimeSpan delta = time - lastLogRotation;
 
   if (Log && delta.hours() < 24) {
     return;
@@ -204,10 +204,9 @@ void rotateLog(const DateTime& time) {
 
   if (printHeader) {
     Log->println(CSV_HEADER);
-    Log->flush();
   }
 
-  lastLogTime = time;
+  lastLogRotation = time;
 }
 
 void loop() {
@@ -223,16 +222,20 @@ void loop() {
 
   rotateLog(time);
 
+  const uint32_t rpm1 = measureRpm(fan1Revolutions);
+  const uint32_t rpm2 = measureRpm(fan2Revolutions);
+
   Log->print(time.timestamp());
   Log->print(';');
   Log->print(temperature);
   Log->print(';');
   Log->print(pulseWidth);
   Log->print(';');
-  Log->print(measureRpm(fan1Revolutions));
+  Log->print(rpm1);
   Log->print(';');
-  Log->print(measureRpm(fan2Revolutions));
+  Log->print(rpm2);
   Log->println();
+  Log->flush();
 
   // TODO: this is fine for the fan, but it's unprecise for the pumps
   delay(60000); // 1 min
