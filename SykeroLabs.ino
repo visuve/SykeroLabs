@@ -10,15 +10,17 @@
   Copyright (©) visuve 2022
 */
 
-enum Pins : uint8_t {
-  FAN1_RPM_IN = 2,
-  FAN2_RPM_IN = 3,
-  PUMP_RELAY = 4,
-  FAN_RELAY = 7,
-  TEMPERATURE_IN = 8,
-  FAN_PWM_OUT = 9,  
-  SD_CARD_CS_IN = 10
-};
+namespace Pins {
+  enum : uint8_t {
+    FAN1_RPM_IN = 2,
+    FAN2_RPM_IN = 3,
+    PUMP_RELAY = 4,
+    FAN_RELAY = 7,
+    TEMPERATURE_IN = 8,
+    FAN_PWM_OUT = 9,  
+    SD_CARD_CS_IN = 10
+  };
+}
 
 OneWire TemperatureInterface(Pins::TEMPERATURE_IN);
 DallasTemperature TemperatureSensors(&TemperatureInterface);
@@ -37,14 +39,16 @@ DateTime lastLogRotation;
 constexpr char CSV_HEADER[] = "Time;Temperature;Pulse Width;Fan 1 RPM;Fan 2 RPM";
 
 void setup() { 
-  pinMode(FAN1_RPM_IN, INPUT);
-  pinMode(FAN2_RPM_IN, INPUT);
-  pinMode(PUMP_RELAY, OUTPUT);
-  pinMode(FAN_RELAY, OUTPUT);
+  pinMode(Pins::FAN1_RPM_IN, INPUT);
+  pinMode(Pins::FAN2_RPM_IN, INPUT);
+  pinMode(Pins::PUMP_RELAY, OUTPUT);
+  pinMode(Pins::FAN_RELAY, OUTPUT);
 
-  pinMode(TEMPERATURE_IN, INPUT);
-  pinMode(FAN_PWM_OUT, OUTPUT);
-  pinMode(SD_CARD_CS_IN, INPUT);
+  pinMode(Pins::TEMPERATURE_IN, INPUT);
+  pinMode(Pins::FAN_PWM_OUT, OUTPUT);
+  pinMode(Pins::SD_CARD_CS_IN, INPUT);
+
+  pinMode(LED_BUILTIN, OUTPUT);
 
   analogWrite(Pins::PUMP_RELAY, pumpRelayState);
   analogWrite(Pins::FAN_RELAY, fanRelayState);
@@ -169,10 +173,17 @@ void togglePumpRelay(const DateTime& time) {
   }
 }
 
-void rotateLog(const DateTime& time) {
-  const TimeSpan delta = time - lastLogRotation;
+bool rotationNeeded(const DateTime& time) {
+  if (!Log) {
+    return true;
+  }
 
-  if (Log && delta.hours() < 24) {
+  const TimeSpan delta = time - lastLogRotation;
+  return time.hour() == 0 && delta.totalseconds() >= 3600;
+}
+
+void rotateLog(const DateTime& time) {
+  if (!rotationNeeded(time)) {
     return;
   }
 
@@ -186,8 +197,8 @@ void rotateLog(const DateTime& time) {
     }
 
     // The file name cannot be longer than 13 characters...
-    char filename[13] = {};
-    sprintf(filename, "%d%02d%02d.txt", time.year(), time.month(), time.day());
+    char filename[] = "YYYYMMDD.csv";
+    time.toString(filename);
 
     printHeader = !SD.exists(filename);
 
@@ -195,10 +206,13 @@ void rotateLog(const DateTime& time) {
 
     if (LogFile) {
       Log = &LogFile;
-    } else {
-      Serial.print("Could not open \"");
+      Serial.print("Log ");
       Serial.print(filename);
-      Serial.println("\" for logging!");
+      Serial.println(" opened.");
+    } else {
+      Serial.print("Could not open ");
+      Serial.print(filename);
+      Serial.println(" for logging!");
     }
   }
 
@@ -210,17 +224,16 @@ void rotateLog(const DateTime& time) {
 }
 
 void loop() {
-  TemperatureSensors.requestTemperatures();
-  
   const DateTime time = Clock.now();
+  rotateLog(time);
+
+  TemperatureSensors.requestTemperatures();
   const float temperature = TemperatureSensors.getTempCByIndex(0);
   const uint8_t pulseWidth = pulseWidthFromTemperature(temperature);
   
   toggleFanRelay(pulseWidth);
   adjustFanSpeed(pulseWidth);
   togglePumpRelay(time);
-
-  rotateLog(time);
 
   const uint32_t rpm1 = measureRpm(fan1Revolutions);
   const uint32_t rpm2 = measureRpm(fan2Revolutions);
@@ -237,6 +250,7 @@ void loop() {
   Log->println();
   Log->flush();
 
-  // TODO: this is fine for the fan, but it's unprecise for the pumps
-  delay(60000); // 1 min
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(60000); // TODO: this is fine for the fan, but it's unprecise for the pumps
+  digitalWrite(LED_BUILTIN, HIGH);
 }
