@@ -157,7 +157,7 @@ void togglePumpRelay(const DateTime& time) {
 
   const TimeSpan delta = time - lastPumpTime;
 
-  if (pumpRelayState == LOW && delta.seconds() >= 3300)  {
+  if (pumpRelayState == LOW && delta.totalseconds() >= 3480)  {
       Serial.println("Turning on pumps!");
       pumpRelayState = HIGH;
       digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
@@ -165,7 +165,7 @@ void togglePumpRelay(const DateTime& time) {
       return;
   }
 
-  if (pumpRelayState == HIGH && delta.seconds() >= 60) {
+  if (pumpRelayState == HIGH && delta.totalseconds() >= 120) {
     Serial.println("Turning off pumps.");
     pumpRelayState = LOW;
     digitalWrite(Pins::PUMP_RELAY, pumpRelayState);
